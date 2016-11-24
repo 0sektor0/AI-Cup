@@ -1,4 +1,4 @@
-using Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk.Model;
+п»їusing Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk.Model;
 using System;
 using System.Collections;
 
@@ -6,12 +6,11 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
 {
     public sealed class MyStrategy : IStrategy
     {
-        double curentAngle, prevLife=100; //угол движения до коллизии
-        bool collisionFlag = false, movementFlag = false, retreat = false; //флаги состояний   
-        double match = 0;
-        double[] checkPoint = new double[2] {500,300};
+        double curentAngle, prevLife = 100; //ГіГЈГ®Г« Г¤ГўГЁГ¦ГҐГ­ГЁГї Г¤Г® ГЄГ®Г«Г«ГЁГ§ГЁГЁ
+        bool collisionFlag = false, retreat = false, inAtackZone=true; //ГґГ«Г ГЈГЁ Г±Г®Г±ГІГ®ГїГ­ГЁГ©   
+        double[] checkPoint = new double[2] { 500, 300 };
         double[] lastPoint = new double[2];
-        double[] retreatCoor = new double[2] { 1400,1400};
+        double[] retreatCoor = new double[2] { 1400, 1400 };
         int stage = 0;
 
         void collisionTurn(ref Move move, bool flag, double angle)
@@ -55,18 +54,18 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                 move.Speed = -movementSpeed;
             }
 
-            //обнаружение коллизий
+            //Г®ГЎГ­Г Г°ГіГ¦ГҐГ­ГЁГҐ ГЄГ®Г«Г«ГЁГ§ГЁГ©
             foreach (Building building in world.Buildings)
                 objectsInView.Add(building);
             foreach (Tree obj in world.Trees)
                 objectsInView.Add(obj);
             foreach (Minion minions in world.Minions)
-                //if (minions.Faction == self.Faction)  // огибать только своих крипов
+                if (minions.Faction == self.Faction || minions.Faction==Faction.Neutral)  // Г®ГЈГЁГЎГ ГІГј ГІГ®Г«ГјГЄГ® Г±ГўГ®ГЁГµ ГЄГ°ГЁГЇГ®Гў
                     objectsInView.Add(minions);
             foreach (Wizard wizard in world.Wizards)
                 if (!wizard.IsMe)
                     objectsInView.Add(wizard);
-            //корректировка коллизий
+            //ГЄГ®Г°Г°ГҐГЄГІГЁГ°Г®ГўГЄГ  ГЄГ®Г«Г«ГЁГ§ГЁГ©
             foreach (CircularUnit obj in objectsInView)
                 if ((obj.GetDistanceTo(self) - self.Radius - obj.Radius) < 50)
                 {
@@ -88,35 +87,19 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                 collisionTurn(ref move, false, 3);
             if (!collisionFlag && discrepancy >= -0.2 && discrepancy <= 0.2)
                 collisionTurn(ref move, true, 0);
-
-            //позволяет избежать избиение стены лбом
-            if (self.X == lastPoint[0] && self.Y == lastPoint[1] && !movementFlag)
-            {
-                movementFlag = true;
-                match = match + 50;
-            }
-            if (movementFlag)
-            {
-                move.Speed = -move.Speed;
-                match--;
-                if (match == 0)
-                {
-                    move.Speed = -move.Speed;
-                    move.Turn = -2;
-                    movementFlag = false;
-                }
-            }
-            lastPoint[0] = self.X;
-            lastPoint[1] = self.Y;
         }
         ArrayList findEnemy(World world, Wizard self)
         {
-            double distToMinion = 2000, distToWizard = 2000, minMinionHP = 100, minWizardHP = 100, dist;
+            double distToMinion = 2000, distToWizard = 2000, distToTower=2000, minMinionHP = 100, minWizardHP = 100, dist, count=0;
             Minion nearestMinion = null, minionWithoutHP = null;
             Wizard nearestWizars = null, wizardWithoutHP = null;
             Building nearestBuilding = null;
+
+            inAtackZone = false;
             foreach (Minion minion in world.Minions)
             {
+                if (minion.Faction == self.Faction && self.GetAngleTo(minion) < 1.4 && self.GetAngleTo(minion) > -1.4)
+                    count++;
                 if (minion.Faction != self.Faction && minion.Faction != Faction.Neutral)
                 {
                     dist = self.GetDistanceTo(minion);
@@ -130,6 +113,8 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                         minMinionHP = minion.Life;
                         minionWithoutHP = minion;
                     }
+                    if (dist-100 <= minion.VisionRange)
+                        inAtackZone = true;
                 }
             }
             foreach (Wizard wizard in world.Wizards)
@@ -147,15 +132,22 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                         minWizardHP = wizard.Life;
                         wizardWithoutHP = wizard;
                     }
+                    if (dist - 100 <= wizard.CastRange)
+                        inAtackZone = true;
                 }
             }
             foreach (Building building in world.Buildings)
             {
                 if (building.Faction != self.Faction && self.GetDistanceTo(building) <= self.CastRange)
+                {
+                    count++;
                     nearestBuilding = building;
-                    
+                    distToTower = self.GetDistanceTo(building);
+                    if (distToTower - 100 <= building.VisionRange)
+                        inAtackZone = true;
+                }
             }
-            return new ArrayList() { nearestMinion, minionWithoutHP, distToMinion, minMinionHP, nearestWizars, wizardWithoutHP, distToWizard, minWizardHP, nearestBuilding};
+            return new ArrayList() { nearestMinion, minionWithoutHP, distToMinion, minMinionHP, nearestWizars, wizardWithoutHP, distToWizard, minWizardHP, nearestBuilding, distToTower, count};
         }
         void atackEnemyWizard(Wizard wizard, Wizard self, World world, ref Move move)
         {
@@ -174,10 +166,10 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
             double angleToEnemy = self.GetAngleTo(minion);
             move.Speed = 0; //stop moving 
             if (angleToEnemy >= 0)//aiming
-                move.Turn = 0.025;
+                move.Turn = 0.05;
             else
-                move.Turn = -0.025;
-            if (angleToEnemy > -0.1 && angleToEnemy < 0.1 && self.RemainingActionCooldownTicks == 0 && (minion.Life > 24 || minion.Life <= 12))//start shooting
+                move.Turn = -0.05;
+            if (angleToEnemy > -0.15 && angleToEnemy < 0.15 && self.RemainingActionCooldownTicks == 0)//start shooting
                 move.Action = ActionType.MagicMissile;
         }
         void atackEnemyBuilding(Building building, Wizard self, World world, ref Move move)
@@ -185,22 +177,20 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
             double angleToEnemy = self.GetAngleTo(building);
             move.Speed = 0; //stop moving 
             if (angleToEnemy >= 0)//aiming
-                move.Turn = 0.025;
+                move.Turn = 0.05;
             else
-                move.Turn = -0.025;
+                move.Turn = -0.05;
             if (angleToEnemy > -0.1 && angleToEnemy < 0.1 && self.RemainingActionCooldownTicks == 0)//start shooting
                 move.Action = ActionType.MagicMissile;
         }
         void movementControl(ref Move move, Wizard self, World world, ref double speed, double distanceToCheckPoint)
         {
             ArrayList scanResult;
-            scanResult = findEnemy(world, self); //атаковать или отступать
+            scanResult = findEnemy(world, self); //Г ГІГ ГЄГ®ГўГ ГІГј ГЁГ«ГЁ Г®ГІГ±ГІГіГЇГ ГІГј
             double angle = self.GetAngleTo(retreatCoor[0], retreatCoor[1]);
+            retreat=false;
 
-            if (self.Life > 60)
-                retreat = false;
-
-            if (scanResult[0] != null && (double)scanResult[2] >= 212) // атаковать ближнего миньона
+            if (scanResult[0] != null) // Г ГІГ ГЄГ®ГўГ ГІГј ГЎГ«ГЁГ¦Г­ГҐГЈГ® Г¬ГЁГ­ГјГ®Г­Г 
             {
                 atackEnemyMinion((Minion)scanResult[0], self, world, ref move);
                 if ((double)scanResult[3] <= 24) //!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -208,37 +198,26 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                 retreat = false;
             }
 
-            if (scanResult[4] != null && (double)scanResult[6] >= 212) // атаковтать ближнего мага
+            if (scanResult[4] != null) //  atack wizard
             {
                 atackEnemyWizard((Wizard)scanResult[4], self, world, ref move);
-                if ((double)scanResult[7] <=24) // ластхит крипа !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                if ((double)scanResult[7] <= 24) 
                     atackEnemyWizard((Wizard)scanResult[5], self, world, ref move);
                 retreat = false;
             }
 
-            if (scanResult[8]!=null)
+            if (scanResult[8] != null)
                 atackEnemyBuilding((Building)scanResult[8], self, world, ref move);
 
-            if (scanResult[4] != null && (double)scanResult[6] < 212)  //побег от миньона
+            if ((scanResult[4] != null && (double)scanResult[6] < 300) || (scanResult[0] != null && (double)scanResult[2] < 300) || (scanResult[8] != null && (double)scanResult[9] < 450))  //РїРѕР±РµРі РѕС‚ Р±Р»РёР¶РЅРµРіРѕ РєРѕРЅС‚Р°РєС‚Р°
             {
+                Minion min = (Minion)scanResult[0];
                 speed = 4;
                 movementTo(world, self, ref move, retreatCoor, speed, false);
                 retreat = true;
                 if (angle < 1.57 && angle > -1.57)
                     movementTo(world, self, ref move, retreatCoor, speed, true);
-                if ((double)scanResult[6] < 100)
-                {
-                    retreat = false;
-                    atackEnemyWizard((Wizard)scanResult[4], self, world, ref move);
-                }
                 move.Action = ActionType.MagicMissile;
-            }
-
-            if (scanResult[0] != null && (double)scanResult[2] < 212) //побег от мага
-            {
-                speed = 4;
-                movementTo(world, self, ref move, retreatCoor, speed, false);
-                retreat = true;
             }
 
             if (self.Life < 50)
@@ -250,83 +229,69 @@ namespace Com.CodeGame.CodeWizards2016.DevKit.CSharpCgdk
                 else
                     movementTo(world, self, ref move, retreatCoor, 4, false);
                 retreat = true;
+                if (!inAtackZone)
+                {
+                    retreat = false;
+                    move.Speed = 0;
+                }
             }
 
-            if (scanResult[0] == null && scanResult[4] == null && !retreat)
+            //if (self.Life > 55)
+              //  retreat = false;
+
+            if (scanResult[0] == null && scanResult[4] == null && !retreat) // moving
             {
                 movementTo(world, self, ref move, checkPoint, speed, true);
                 if (distanceToCheckPoint < 50 && !retreat)
-                {
-                    move.Speed = 0;
                     stage++;
-                }
-                if (distanceToCheckPoint < 50 && retreat)
-                {
-                    move.Speed = 0;
-                    stage--;
-                }
             }
 
-            if (self.Life - prevLife > 50)
+            if (self.Life - prevLife > 60)
             {
                 stage = 0;
-                scanResult[0] = null;
-                scanResult[4] = null;
                 retreat = false;
             }
-            prevLife = self.Life;
+            //Console.WriteLine($"{scanResult[10]} {retreat} {scanResult[2]}");
         }
 
         public void Move(Wizard self, World world, Game game, Move move)
         {
             double distanceToCheckPoint;
             double distanceToRetreatPoint;
-            double speed = 0, angleToRetreat= self.GetAngleTo(retreatCoor[0], retreatCoor[1]);
-            //Console.WriteLine($"{self.X} {self.Y} {stage} {self.Life} {self.Life-prevLife}");
+            double speed = 0, angleToRetreat = self.GetAngleTo(retreatCoor[0], retreatCoor[1]);
 
-            switch (stage) // хождение по чекпоинтам
+            if (world.TickIndex > 100)
             {
-                case 0:
-                    checkPoint[0] = 250;
-                    checkPoint[1] = 2700;
-                    retreatCoor[0] = 420;
-                    retreatCoor[1] = 3900;
-                    speed = 2.5;
-                    break;
-                case 1:
-                    checkPoint[0] = 500;
-                    checkPoint[1] = 200;
-                    retreatCoor[0] = 420;
-                    retreatCoor[1] = 3900;
-                    speed = 3.3;
-                    break;
-                case 2:
-                    checkPoint[0] = 800;
-                    checkPoint[1] = 100;
-                    retreatCoor[0] = 420;
-                    retreatCoor[1] = 2000;
-                    speed = 2.6;
-                    break;
-                case 3:
-                    checkPoint[0] = 2000;
-                    checkPoint[1] = 300;
-                    retreatCoor[0] = 500;
-                    retreatCoor[1] = 300;
-                    speed = 2.7;
-                    break;
-                case 4:
-                    checkPoint[0] = 3800;
-                    checkPoint[1] = 300;
-                    retreatCoor[0] = 500;
-                    retreatCoor[1] = 300;
-                    speed = 2.7;
-                    break;
-                default:
-                    break;
+                retreatCoor[0] = 600;
+                retreatCoor[1] = 3900;
+                speed = 3;
+                switch (stage) // С…РѕР¶РґРµРЅРёРµ РїРѕ С‡РµРєРїРѕРёРЅС‚Р°Рј
+                {
+                    case 0:
+                        checkPoint[0] = 200;
+                        checkPoint[1] = 3800;
+                        break;
+                    case 1:
+                        checkPoint[0] = 500;
+                        checkPoint[1] = 3800;
+                        break;
+                    case 2:
+                        checkPoint[0] = 500;
+                        checkPoint[1] = 3500;
+                        break;                    
+                    default:
+                        break;
+                }
+                if (stage > 2)
+                {
+                    checkPoint[0] = checkPoint[0] + 150;
+                    checkPoint[1] = checkPoint[1] - 150;
+                }
+
+                distanceToCheckPoint = self.GetDistanceTo(checkPoint[0], checkPoint[1]) - self.Radius;
+                distanceToRetreatPoint = self.GetDistanceTo(retreatCoor[0], retreatCoor[1]) - self.Radius;
+                movementControl(ref move, self, world, ref speed, distanceToCheckPoint);
             }
-            distanceToCheckPoint = self.GetDistanceTo(checkPoint[0], checkPoint[1]) - self.Radius;
-            distanceToRetreatPoint = self.GetDistanceTo(retreatCoor[0], retreatCoor[1]) - self.Radius;
-            movementControl(ref move,self,world,ref speed,distanceToCheckPoint);
         }
     }
 }
